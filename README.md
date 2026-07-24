@@ -6,8 +6,6 @@ A local OpenAI-compatible API bridge that allows AI coding agents (Cline, Roo Co
 
 The bridge exposes an OpenAI-style API (`/v1/chat/completions`, `/v1/models`) and forwards requests to Deepseek Studio by controlling an authenticated browser session through lightweight DOM and network automation.
 
-**Quick warning**: Model `Deepseek/Deepseek3.8-max` currently only supports "Thinking" on Deepseek studio, so requests without reasonning won't work.
-
 ## Features
 
 * ✅ Fully OpenAI-compatible API endpoint
@@ -85,8 +83,8 @@ The bridge exposes its API on your local network. Find your local IP (e.g., `192
 | Setting  | Value                                |
 | -------- | ------------------------------------ |
 | Base URL | `http://127.0.0.1:8000/v1`           |
-| API Key  | `sk-Deepseek-bridge-key`                 |
-| Model    | `Deepseek/Deepseek3.7-max` or `Deepseek/Deepseek3.7-plus` or `Deepseek/Deepseek3.8-max`|
+| API Key  | `sk-deepseek-bridge-key`                 |
+| Model    | `deepseek/deepseek-v4-pro` or `deepseek/deepseek-v4-flash`|
 
 ## Supported Clients
 
@@ -95,8 +93,8 @@ The bridge exposes its API on your local network. Find your local IP (e.g., `192
 2. Select "Custom provider"
 3. Select "OpenAI-Compatible"
 4. Enter `http://127.0.0.1:8000/v1`
-5. Enter `sk-Deepseek-bridge-key`
-6. Add models (`Deepseek/Deepseek3.7-max` or/and `Deepseek/Deepseek3.7-plus` or/and `Deepseek/Deepseek3.8-max`)
+5. Enter `sk-deepseek-bridge-key`
+6. Add models (`deepseek/deepseek-v4-pro` and/or `deepseek/deepseek-v4-flash`)
 7. Press enter (you can enable thinking...)
 8. Enjoy!
 
@@ -115,7 +113,7 @@ Add to your `config.json`:
     {
       "title": "Deepseek Bridge (Max)",
       "provider": "openai",
-      "model": "Deepseek/Deepseek3.7-max",
+      "model": "deepseek/deepseek-v4-pro",
       "apiBase": "http://192.168.1.38:8000/v1",
       "apiKey": "sk-Deepseek-bridge-key"
     }
