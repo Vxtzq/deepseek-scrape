@@ -1,18 +1,18 @@
-### ⚠️ DISCLAIMER - This might be against Qwen Studio ToS, Use at your own risk ⚠️
-![Qwen-Scrape](https://github.com/Vxtzq/qwen-scrape/blob/main/title.png)
-# Qwen-Scrape
+### ⚠️ DISCLAIMER - This might be against DeepSeek ToS, Use at your own risk ⚠️
+![Deepseek-Scrape](https://github.com/Vxtzq/Deepseek-scrape/blob/main/title.png)
+# Deepseek-Scrape
 
-A local OpenAI-compatible API bridge that allows AI coding agents (Cline, Roo Code, Continue.dev, Cursor, and custom Python agents) to use Qwen Studio models through a local network endpoint.
+A local OpenAI-compatible API bridge that allows AI coding agents (Cline, Roo Code, Continue.dev, Cursor, and custom Python agents) to use Deepseek Studio models through a local network endpoint.
 
-The bridge exposes an OpenAI-style API (`/v1/chat/completions`, `/v1/models`) and forwards requests to Qwen Studio by controlling an authenticated browser session through lightweight DOM and network automation.
+The bridge exposes an OpenAI-style API (`/v1/chat/completions`, `/v1/models`) and forwards requests to Deepseek Studio by controlling an authenticated browser session through lightweight DOM and network automation.
 
-**Quick warning**: Model `qwen/qwen3.8-max` currently only supports "Thinking" on Qwen studio, so requests without reasonning won't work.
+**Quick warning**: Model `Deepseek/Deepseek3.8-max` currently only supports "Thinking" on Deepseek studio, so requests without reasonning won't work.
 
 ## Features
 
 * ✅ Fully OpenAI-compatible API endpoint
 * ✅ Works seamlessly with coding agents supporting custom OpenAI providers
-* ✅ Supports dynamic Qwen Studio web model switching (e.g., Qwen3.7-Max, Qwen3.7-Plus)
+* ✅ Supports dynamic Deepseek Studio web model switching (e.g., Deepseek3.7-Max, Deepseek3.7-Plus)
 * ✅ Real-time streaming response support
 * ✅ Localhost (accessible from `127.0.0.1`)
 * ✅ No local model hosting or GPU required
@@ -33,21 +33,21 @@ Browser Automation Script (Console Injection)
      |
      | Native DOM Injection & Network Interception
      v
-Qwen Studio Web Interface (Authenticated Session)
+Deepseek Studio Web Interface (Authenticated Session)
 ```
 
 ## Requirements
 
 * Python 3.10+
-* A valid, logged-in Qwen Studio session in a Chromium-based browser (Chrome, Edge, Brave)
+* A valid, logged-in Deepseek Studio session in a Chromium-based browser (Chrome, Edge, Brave)
 * Tampermonkey extension (Recommended) or manual Console access
 
 ## Installation
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/Vxtzq/qwen-scrape.git
-   cd qwen-openai-bridge
+   git clone https://github.com/Vxtzq/Deepseek-scrape.git
+   cd Deepseek-openai-bridge
    ```
 
 2. Install Python dependencies:
@@ -65,7 +65,7 @@ python server.py
 You should see:
 ```text
 🟢 BRIDGE ACTIVE.
-🔑 API Key: sk-qwen-bridge-key
+🔑 API Key: sk-Deepseek-bridge-key
 ```
 
 ### 2. Connect the Browser Session
@@ -85,18 +85,18 @@ The bridge exposes its API on your local network. Find your local IP (e.g., `192
 | Setting  | Value                                |
 | -------- | ------------------------------------ |
 | Base URL | `http://127.0.0.1:8000/v1`           |
-| API Key  | `sk-qwen-bridge-key`                 |
-| Model    | `qwen/qwen3.7-max` or `qwen/qwen3.7-plus` or `qwen/qwen3.8-max`|
+| API Key  | `sk-Deepseek-bridge-key`                 |
+| Model    | `Deepseek/Deepseek3.7-max` or `Deepseek/Deepseek3.7-plus` or `Deepseek/Deepseek3.8-max`|
 
 ## Supported Clients
 
-### Claude code / Qwen code
+### Claude code / Deepseek code
 1. Type /auth
 2. Select "Custom provider"
 3. Select "OpenAI-Compatible"
 4. Enter `http://127.0.0.1:8000/v1`
-5. Enter `sk-qwen-bridge-key`
-6. Add models (`qwen/qwen3.7-max` or/and `qwen/qwen3.7-plus` or/and `qwen/qwen3.8-max`)
+5. Enter `sk-Deepseek-bridge-key`
+6. Add models (`Deepseek/Deepseek3.7-max` or/and `Deepseek/Deepseek3.7-plus` or/and `Deepseek/Deepseek3.8-max`)
 7. Press enter (you can enable thinking...)
 8. Enjoy!
 
@@ -113,11 +113,11 @@ Add to your `config.json`:
 {
   "models": [
     {
-      "title": "Qwen Bridge (Max)",
+      "title": "Deepseek Bridge (Max)",
       "provider": "openai",
-      "model": "qwen/qwen3.7-max",
+      "model": "Deepseek/Deepseek3.7-max",
       "apiBase": "http://192.168.1.38:8000/v1",
-      "apiKey": "sk-qwen-bridge-key"
+      "apiKey": "sk-Deepseek-bridge-key"
     }
   ]
 }
@@ -135,11 +135,11 @@ from openai import OpenAI
 
 client = OpenAI(
     base_url="http://192.168.1.38:8000/v1",
-    api_key="sk-qwen-bridge-key"
+    api_key="sk-Deepseek-bridge-key"
 )
 
 response = client.chat.completions.create(
-    model="qwen/qwen3.7-max",
+    model="Deepseek/Deepseek3.7-max",
     messages=[{"role": "user", "content": "Write a Python script to parse JSON."}],
     stream=True
 )
@@ -153,12 +153,12 @@ for chunk in response:
 
 ### Connection Failed
 * Ensure `server.py` is running.
-* Ensure the Qwen browser tab is open and the Tampermonkey script is active.
+* Ensure the Deepseek browser tab is open and the Tampermonkey script is active.
 * Verify your Base URL includes `/v1` (e.g., `http://192.168.1.38:8000/v1`).
 
 ### Model Not Found
 * Test the discovery endpoint in your browser: `http://192.168.1.38:8000/v1/models`
-* Ensure the `model` string in your agent exactly matches one of the returned `id` values (e.g., `qwen/qwen3.7-max`).
+* Ensure the `model` string in your agent exactly matches one of the returned `id` values (e.g., `Deepseek/Deepseek3.7-max`).
 
 ## Limitations
 - Based on a web interface, might not be as reliable as a standard paid API
@@ -168,7 +168,7 @@ for chunk in response:
 ## Security Notes
 
 ⚠️ **This project is intended for local, trusted network use only.** 
-Do not expose port `8000` to the public internet. Your browser session contains authenticated access to your Qwen account. 
+Do not expose port `8000` to the public internet. Your browser session contains authenticated access to your Deepseek account. 
 
 ## Disclaimer
 
