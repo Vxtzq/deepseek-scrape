@@ -115,7 +115,7 @@ Add to your `config.json`:
       "provider": "openai",
       "model": "deepseek/deepseek-v4-pro",
       "apiBase": "http://192.168.1.38:8000/v1",
-      "apiKey": "sk-Deepseek-bridge-key"
+      "apiKey": "sk-deepseek-bridge-key"
     }
   ]
 }
@@ -133,11 +133,11 @@ from openai import OpenAI
 
 client = OpenAI(
     base_url="http://192.168.1.38:8000/v1",
-    api_key="sk-Deepseek-bridge-key"
+    api_key="sk-deepseek-bridge-key"
 )
 
 response = client.chat.completions.create(
-    model="Deepseek/Deepseek3.7-max",
+    model="deepseek/deepseek-v4-pro",
     messages=[{"role": "user", "content": "Write a Python script to parse JSON."}],
     stream=True
 )
@@ -156,7 +156,7 @@ for chunk in response:
 
 ### Model Not Found
 * Test the discovery endpoint in your browser: `http://192.168.1.38:8000/v1/models`
-* Ensure the `model` string in your agent exactly matches one of the returned `id` values (e.g., `Deepseek/Deepseek3.7-max`).
+* Ensure the `model` string in your agent exactly matches one of the returned `id` values (e.g., `deepseek/deepseek-v4-pro`).
 
 ## Limitations
 - Based on a web interface, might not be as reliable as a standard paid API
