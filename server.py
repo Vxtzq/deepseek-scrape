@@ -9,26 +9,38 @@ import re
 import ast
 from collections import deque
 
-recent_prompts = deque(maxlen=5)  # liste de (prompt_text, response_text)
-app = FastAPI(title="Qwen God-Mode Bridge", version="5.7")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+# Cache pour éviter les appels en double
+recent_prompts = deque(maxlen=5)
 
-API_KEY = "sk-qwen-bridge-key"
+app = FastAPI(title="DeepSeek God-Mode Bridge", version="5.7")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
+API_KEY = "sk-deepseek-bridge-key"
+
+# Mapping des modèles (ajustez selon vos besoins)
 MODEL_MAP = {
-    "qwen/qwen3.7-plus": "Qwen3.7-Plus", "qwen/qwen3.7-max": "Qwen3.7-Max","qwen/generic": "Qwen3.7-Plus",
-    "qwen/qwen3.8-max": "Qwen3.8-Max-Preview",
+    "deepseek/deepseek-v4-pro": "DeepSeek-V4-Pro",
+    "deepseek/deepseek-v4-flash": "DeepSeek-V4-Flash",
+    "deepseek/generic": "DeepSeek-V4-Pro",  # fallback
 }
+
+# Pas de mode raisonnement séparé pour DeepSeek (cf. limitations README)
+# On garde une variable pour compatibilité, mais elle ne changera pas.
+current_reasoning_mode = None
 
 command_queue = queue.Queue()
 response_queue: asyncio.Queue | None = None
 response_lock = asyncio.Lock()
 is_processing = False
-current_ui_model = "Qwen3.7-Plus"
+current_ui_model = "DeepSeek-V4-Pro"
 
-# ✅ NOUVEAU : état du mode raisonnement (assume Think au démarrage, ajuste si ton UI démarre en Fast)
-current_reasoning_mode = "Think"
-
+# Prompt système pour les appels d'outils (identique à Qwen, car basé sur des blocs <tool_call>)
 TOOL_SYSTEM_PROMPT = """
 You are a precise tool-calling engine.
 When you need to use a tool, you MUST respond with one or more <tool_call> blocks.
@@ -49,21 +61,28 @@ Incorrect Example (FORBIDDEN - DO NOT DO THIS):
 </tool_call>
 """.strip()
 
+
 def _parse_json_robust(s: str):
     s = s.strip()
-    if not s: return None
-    try: return json.loads(s)
+    if not s:
+        return None
+    try:
+        return json.loads(s)
     except json.JSONDecodeError:
         try:
             parsed = ast.literal_eval(s)
-            if isinstance(parsed, dict): return parsed
-        except Exception: pass
+            if isinstance(parsed, dict):
+                return parsed
+        except Exception:
+            pass
     return None
+
 
 def _process_candidate(candidate, allowed_tools, result_list, seen_names):
     name = str(candidate.get("name") or candidate.get("tool") or "").strip()
     args = candidate.get("arguments") or candidate.get("args") or {}
-    if not name or (allowed_tools and name not in allowed_tools) or name in seen_names: return
+    if not name or (allowed_tools and name not in allowed_tools) or name in seen_names:
+        return
     try:
         if isinstance(args, str):
             parsed_args = _parse_json_robust(args)
@@ -80,50 +99,31 @@ def _process_candidate(candidate, allowed_tools, result_list, seen_names):
     })
     seen_names.add(name)
 
+
 def convert_llm_output_to_openai_tool_calls(text: str, allowed_tools: list = None):
     openai_tool_calls, seen_names = [], set()
     for pattern in [r"<tool_call>\s*(.*?)\s*</tool_call>", r"<tool_use>\s*(.*?)\s*</tool_use>"]:
         for match in re.finditer(pattern, text, re.DOTALL | re.IGNORECASE):
             parsed = _parse_json_robust(match.group(1))
-            if parsed: _process_candidate(parsed, allowed_tools, openai_tool_calls, seen_names)
+            if parsed:
+                _process_candidate(parsed, allowed_tools, openai_tool_calls, seen_names)
     return openai_tool_calls
+
 
 def clean_text_from_tool_calls(text: str) -> str:
     text = re.sub(r"<tool_call>.*?</tool_call>", "", text, flags=re.DOTALL | re.IGNORECASE)
     return re.sub(r"<tool_use>.*?</tool_use>", "", text, flags=re.DOTALL | re.IGNORECASE).strip()
 
-# ✅ NOUVEAU : résolution du mode Fast/Think à partir de la requête OpenAI-like
-def resolve_reasoning_mode(data: dict, requested_model: str) -> str:
-    # 1. Convention OpenAI o-series : reasoning_effort = "none" -> Fast, sinon Think
-    effort = data.get("reasoning_effort")
-    if effort is not None:
-        return "Fast" if str(effort).lower() in ("none", "off", "minimal", "disabled") else "Think"
-
-    # 2. Convention custom : reasoning=True/False, ou objet {"type": "enabled"/"disabled"} (façon Anthropic)
-    reasoning_flag = data.get("reasoning")
-    if isinstance(reasoning_flag, bool):
-        return "Think" if reasoning_flag else "Fast"
-    if isinstance(reasoning_flag, dict):
-        return "Fast" if reasoning_flag.get("type") == "disabled" else "Think"
-
-    # 3. Fallback : suffixe dans le nom du modèle, ex: "qwen/generic-fast" ou "qwen/generic:thinking"
-    lower_model = (requested_model or "").lower()
-    if "fast" in lower_model:
-        return "Fast"
-    if "think" in lower_model or "reasoning" in lower_model:
-        return "Think"
-
-    # 4. Défaut rétrocompatible : on ne change rien, reasoning reste actif
-    return "Think"
 
 @app.get("/v1/models")
 async def list_models():
-    models = [{"id": k, "object": "model", "created": 1677652288, "owned_by": "qwen-bridge"} for k in MODEL_MAP.keys()]
+    models = [{"id": k, "object": "model", "created": 1677652288, "owned_by": "deepseek-bridge"} for k in MODEL_MAP.keys()]
     return {"object": "list", "data": models}
+
 
 @app.post("/v1/chat/completions")
 async def chat_completions(request: Request, authorization: str = Header(None)):
-    global is_processing, response_queue, current_ui_model, current_reasoning_mode
+    global is_processing, response_queue, current_ui_model
 
     if authorization != f"Bearer {API_KEY}":
         raise HTTPException(status_code=401, detail="Invalid API Key")
@@ -131,29 +131,30 @@ async def chat_completions(request: Request, authorization: str = Header(None)):
     data = await request.json()
     messages = data.get("messages", [])
     stream = data.get("stream", True)
-    requested_model = data.get("model", "qwen/generic")
+    requested_model = data.get("model", "deepseek/generic")
     tools = data.get("tools", [])
 
     has_tools = bool(tools)
     allowed_tool_names = [t["function"]["name"] for t in tools] if has_tools else []
 
+    # Injection du prompt système pour les outils si nécessaire
     if has_tools:
         tool_prompt = TOOL_SYSTEM_PROMPT + "\n\nAvailable tools:\n"
         for t in tools:
             fn = t.get("function", {})
             tool_prompt += f"- {fn.get('name')}: {fn.get('description')}\n"
-        if messages and messages[0].get("role") == "system": messages[0]["content"] += "\n\n" + tool_prompt
-        else: messages.insert(0, {"role": "system", "content": tool_prompt.strip()})
+        if messages and messages[0].get("role") == "system":
+            messages[0]["content"] += "\n\n" + tool_prompt
+        else:
+            messages.insert(0, {"role": "system", "content": tool_prompt.strip()})
 
+    # Construction du prompt textuel
     prompt = "\n".join([f"{m['role']}: {m['content']}" for m in messages])
-    
-    prompt = "\n".join([f"{m['role']}: {m['content']}" for m in messages])
-    target_ui_model = MODEL_MAP.get(requested_model, "Qwen3.7-Plus")
-    target_reasoning_mode = resolve_reasoning_mode(data, requested_model)
+
+    target_ui_model = MODEL_MAP.get(requested_model, "DeepSeek-V4-Pro")
     task_id = str(uuid.uuid4())
 
-    # ✅ DÉDUP SAUVAGE : si ce prompt exact a déjà été traité récemment, on renvoie
-    # directement la réponse en cache SANS jamais retaper dans l'UI Qwen.
+    # Vérification du cache pour éviter les doublons
     for cached_prompt, cached_response in recent_prompts:
         if cached_prompt == prompt:
             print(f"♻️ [API] Duplicate prompt detected, returning cached response ({len(cached_response)} chars)", flush=True)
@@ -169,26 +170,25 @@ async def chat_completions(request: Request, authorization: str = Header(None)):
                     "choices": [{"index": 0, "message": {"role": "assistant", "content": cached_response}, "finish_reason": "stop"}]
                 }
 
+    # Verrou pour éviter les appels simultanés
     async with response_lock:
-        if is_processing: raise HTTPException(status_code=429, detail="Bridge is busy.")
+        if is_processing:
+            raise HTTPException(status_code=429, detail="Bridge is busy.")
         is_processing = True
         response_queue = asyncio.Queue()
 
+    # Changement de modèle si nécessaire
     if target_ui_model != current_ui_model:
         print(f"\n🔄 [API] Switching UI model to: {target_ui_model}...", flush=True)
         current_ui_model = target_ui_model
         command_queue.put({"action": "switch_model", "model": target_ui_model})
         await asyncio.sleep(2.0)
 
-    # ✅ NOUVEAU : switch Fast/Think si nécessaire, avant l'envoi du prompt
-    if target_reasoning_mode != current_reasoning_mode:
-        print(f"🧠 [API] Switching reasoning mode to: {target_reasoning_mode}...", flush=True)
-        current_reasoning_mode = target_reasoning_mode
-        command_queue.put({"action": "switch_reasoning_mode", "mode": target_reasoning_mode})
-        await asyncio.sleep(1.0)
+    # DeepSeek n'a pas de basculement Think/Fast, on ignore le mode raisonnement
+    # (le paramètre reasoning_effort est simplement ignoré)
 
     command_queue.put({"action": "send_prompt", "prompt": prompt})
-    print(f"\n📡 [API] Forwarding to browser (Model: {target_ui_model}, Reasoning: {target_reasoning_mode}, Stream: {stream}, HasTools: {has_tools})...", flush=True)
+    print(f"\n📡 [API] Forwarding to browser (Model: {target_ui_model}, Stream: {stream}, HasTools: {has_tools})...", flush=True)
 
     # 🎯 MODE STREAMING
     if stream:
@@ -200,19 +200,17 @@ async def chat_completions(request: Request, authorization: str = Header(None)):
             current_tool_call_id = None
 
             try:
-                yield f"data: {json.dumps({'id': f'chatcmpl-{task_id}', 'object': 'chat.completion.chunk', 'created': 1677652288, 'model': requested_model, 'choices': [{'index': 0, 'delta': {'reasoning_content': ' '}, 'finish_reason': None}]})}\n\n"
-                await asyncio.sleep(0)
+                # Pas de contenu de raisonnement séparé, on envoie juste du contenu standard
+                # On peut éventuellement envoyer un delta vide pour le rôle assistant
+                yield f"data: {json.dumps({'id': f'chatcmpl-{task_id}', 'object': 'chat.completion.chunk', 'created': 1677652288, 'model': requested_model, 'choices': [{'index': 0, 'delta': {'role': 'assistant', 'content': ''}, 'finish_reason': None}]})}\n\n"
 
                 while True:
                     token_data = await asyncio.wait_for(response_queue.get(), timeout=120.0)
                     if token_data.get("type") == "done":
                         break
 
-                    if token_data.get("type") == "reasoning":
-                        text = token_data["text"]
-                        yield f"data: {json.dumps({'id': f'chatcmpl-{task_id}', 'object': 'chat.completion.chunk', 'created': 1677652288, 'model': requested_model, 'choices': [{'index': 0, 'delta': {'reasoning_content': text}, 'finish_reason': None}]})}\n\n"
-
-                    elif token_data.get("type") == "content":
+                    # On ignore le type "reasoning" car DeepSeek ne le supporte pas
+                    if token_data.get("type") == "content":
                         text = token_data["text"]
                         content_buffer += text
                         yield f"data: {json.dumps({'id': f'chatcmpl-{task_id}', 'object': 'chat.completion.chunk', 'created': 1677652288, 'model': requested_model, 'choices': [{'index': 0, 'delta': {'content': text}, 'finish_reason': None}]})}\n\n"
@@ -243,6 +241,7 @@ async def chat_completions(request: Request, authorization: str = Header(None)):
                     yield "data: [DONE]\n\n"
                     return
 
+                # Détection des appels d'outils dans le texte (fallback)
                 if has_tools:
                     openai_tool_calls = convert_llm_output_to_openai_tool_calls(content_buffer, allowed_tools=allowed_tool_names)
                     if openai_tool_calls:
@@ -251,8 +250,9 @@ async def chat_completions(request: Request, authorization: str = Header(None)):
                         yield "data: [DONE]\n\n"
                         return
 
-                # ✅ Succès normal (pas de tool call) : on met en cache ICI, dans le bon scope
-                recent_prompts.append((prompt, content_buffer))
+                # Mise en cache de la réponse propre
+                clean_text = clean_text_from_tool_calls(content_buffer)
+                recent_prompts.append((prompt, clean_text))
 
                 yield f"data: {json.dumps({'id': f'chatcmpl-{task_id}', 'object': 'chat.completion.chunk', 'created': 1677652288, 'model': requested_model, 'choices': [{'index': 0, 'delta': {}, 'finish_reason': 'stop'}]})}\n\n"
                 yield "data: [DONE]\n\n"
@@ -273,9 +273,11 @@ async def chat_completions(request: Request, authorization: str = Header(None)):
         try:
             while True:
                 token_data = await asyncio.wait_for(response_queue.get(), timeout=120.0)
-                if token_data.get("type") == "done": break
-                if token_data.get("type") in ["content", "reasoning"]:
+                if token_data.get("type") == "done":
+                    break
+                if token_data.get("type") == "content":
                     full_response += token_data["text"]
+                # On ignore le type reasoning
         except asyncio.TimeoutError:
             print("⚠️ [API] Timeout 120s", flush=True)
         finally:
@@ -291,7 +293,6 @@ async def chat_completions(request: Request, authorization: str = Header(None)):
                     "choices": [{"index": 0, "message": {"role": "assistant", "content": None, "tool_calls": openai_tool_calls}, "finish_reason": "tool_calls"}]
                 }
 
-        
         clean_text = clean_text_from_tool_calls(full_response)
         recent_prompts.append((prompt, clean_text))
         return {
@@ -299,18 +300,16 @@ async def chat_completions(request: Request, authorization: str = Header(None)):
             "choices": [{"index": 0, "message": {"role": "assistant", "content": clean_text}, "finish_reason": "stop"}]
         }
 
-@app.post("/qwen-stream")
+
+@app.post("/deepseek-stream")
 async def receive_stream(request: Request):
     global response_queue
     data = await request.json()
 
     if data.get("type") == "stream":
         content = data.get("content", "")
-        reasoning = data.get("reasoning", "")
+        # On ignore le champ reasoning (s'il est envoyé par le script)
         if response_queue is not None:
-            if reasoning:
-                print(f"🧠 [Server] Received reasoning ({len(reasoning)} chars)", flush=True)
-                await response_queue.put({"type": "reasoning", "text": reasoning})
             if content:
                 print(f"📝 [Server] Received content ({len(content)} chars)", flush=True)
                 await response_queue.put({"type": "content", "text": content})
@@ -324,7 +323,7 @@ async def receive_stream(request: Request):
 
     elif data.get("type") == "done":
         print("\n" + "="*60, flush=True)
-        print("✅ QWEN FINISHED!", flush=True)
+        print("✅ DEEPSEEK FINISHED!", flush=True)
         print("="*60 + "\n", flush=True)
         if response_queue is not None:
             await response_queue.put({"type": "done"})
@@ -336,10 +335,14 @@ async def receive_stream(request: Request):
 
     return {"status": "ok"}
 
+
 @app.get("/pending-command")
 async def get_command():
-    try: return command_queue.get_nowait()
-    except queue.Empty: return {"action": None}
+    try:
+        return command_queue.get_nowait()
+    except queue.Empty:
+        return {"action": None}
+
 
 if __name__ == "__main__":
     import uvicorn
