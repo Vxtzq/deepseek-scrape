@@ -9,7 +9,7 @@
 // ==/UserScript==
 
 (() => {
-  console.log("🌌🧠 [Tampermonkey] DeepSeek Bridge v3.12 ACTIVE - Fragment Tracker");
+  console.log("🌌🧠 DeepSeek Bridge v3.12 ACTIVE");
   const SERVER_URL = "http://127.0.0.1:8000";
 
   let currentGenerationId = 0;
@@ -222,9 +222,9 @@
               }
             }
 
-            console.log(`✅ [XHR] Stream terminé.`);
-            console.log(`📝 RAISONNEMENT (${fullReasoning.length} car.) : "${fullReasoning.substring(0, 60)}${fullReasoning.length > 60 ? '...' : ''}"`);
-            console.log(`📝 CONTENU FINAL (${fullContent.length} car.) : "${fullContent}"`);
+            console.log(`✅ [XHR] Stream finished.`);
+            console.log(`📝 REASONING (${fullReasoning.length} car.) : "${fullReasoning.substring(0, 60)}${fullReasoning.length > 60 ? '...' : ''}"`);
+            console.log(`📝 FINAL CONTENT (${fullContent.length} car.) : "${fullContent}"`);
 
             if (fullContent.length > 0 || fullReasoning.length > 0) {
               fetch(`${SERVER_URL}/deepseek-stream`, {
@@ -260,5 +260,5 @@
     return origSend.call(this, body);
   };
 
-  console.log("✅ DeepSeek Bridge v3.12 prêt. Architecture native de fragments active.");
+  console.log("✅ DeepSeek Bridge v3.12 ready.");
 })();
