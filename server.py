@@ -12,7 +12,7 @@ from collections import deque
 # Cache pour éviter les appels en double
 recent_prompts = deque(maxlen=5)
 
-app = FastAPI(title="DeepSeek God-Mode Bridge", version="5.7")
+app = FastAPI(title="DeepSeek Bridge", version="5.7")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
