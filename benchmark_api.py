@@ -30,7 +30,7 @@ def test_models():
         for m in models:
             print(f"  - {m['id']}")
     else:
-        print(f"❌ Erreur: {resp.text}")
+        print(f"❌ Error: {resp.text}")
     return resp.status_code == 200
 
 def test_chat_streaming():
@@ -91,10 +91,10 @@ def test_chat_streaming():
         print(f"\n\n✅ Finished in {elapsed:.2f}s | {chunk_count} chunks")
         if full_reasoning.strip():
             print(f"🧠 [Reasoning complet] {full_reasoning.strip()}")
-        print(f"📝 [Réponse finale] '{full_content.strip()}'")
+        print(f"📝 [Final response] '{full_content.strip()}'")
         return True
     else:
-        print(f"❌ Erreur: {resp.text}")
+        print(f"❌ Error: {resp.text}")
         return False
 
 def test_chat_non_streaming():
@@ -133,7 +133,7 @@ def test_chat_non_streaming():
         print(f"✅ Response took {elapsed:.2f}s: '{content.strip()}'")
         return True
     else:
-        print(f"❌ Erreur: {resp.text}")
+        print(f"❌ Error: {resp.text}")
         return False
 
 def test_tools():
@@ -195,12 +195,12 @@ def test_tools():
             print(f"⚠️ Aucun appel d'outil. Réponse texte: '{content[:100]}...'")
             return True
     else:
-        print(f"❌ Erreur: {resp.text}")
+        print(f"❌ Error: {resp.text}")
         return False
 
 if __name__ == "__main__":
     print("🚀 DeepSeek Bridge Test Suite")
-    print(f"📡 Serveur: {BASE_URL}")
+    print(f"📡 Server: {BASE_URL}")
     print(f"🔑 API Key: {API_KEY}")
     
     results = []
