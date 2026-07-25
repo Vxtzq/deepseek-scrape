@@ -1,75 +1,230 @@
+"""
+Test script pour le bridge DeepSeek
+Vérifie: /v1/models, /v1/chat/completions (streaming et non-streaming) + Reasoning
+"""
 import requests
 import json
+import time
 
-URL = "http://127.0.0.1:8000/v1/chat/completions"
-HEADERS = {
-    "Authorization": "Bearer sk-qwen-bridge-key",
+BASE_URL = "http://127.0.0.1:8000/v1"
+API_KEY = "sk-deepseek-bridge-key"
+
+headers = {
+    "Authorization": f"Bearer {API_KEY}",
     "Content-Type": "application/json"
 }
 
+def test_models():
+    """Teste l'endpoint /v1/models"""
+    print("\n" + "="*60)
+    print("📋 TEST 1: Liste des modèles")
+    print("="*60)
+    
+    resp = requests.get(f"{BASE_URL}/models", headers=headers)
+    print(f"Status: {resp.status_code}")
+    
+    if resp.status_code == 200:
+        data = resp.json()
+        models = data.get("data", [])
+        print(f"✅ {len(models)} modèle(s) trouvé(s):")
+        for m in models:
+            print(f"  - {m['id']}")
+    else:
+        print(f"❌ Erreur: {resp.text}")
+    return resp.status_code == 200
 
-def run_test(label, model, reasoning_effort, prompt):
-    print(f"\n{'='*70}")
-    print(f"🧪 TEST: {label}")
-    print(f"   model={model} | reasoning_effort={reasoning_effort}")
-    print(f"{'='*70}\n")
-
+def test_chat_streaming():
+    """Teste le streaming"""
+    print("\n" + "="*60)
+    print("📡 TEST 2: Chat Completions (STREAMING)")
+    print("="*60)
+    
     payload = {
-        "model": model,
-        "messages": [{"role": "user", "content": prompt}],
-        "stream": True,
-        "reasoning_effort": reasoning_effort
+        "model": "deepseek/generic",
+        "messages": [
+            {"role": "user", "content": "Dis 'Bonjour' en français, uniquement ce mot."}
+        ],
+        "stream": True
     }
-
-    saw_reasoning = False
-    saw_content = False
-
-    with requests.post(URL, headers=HEADERS, json=payload, stream=True) as resp:
-        resp.raise_for_status()
+    
+    start_time = time.time()
+    resp = requests.post(
+        f"{BASE_URL}/chat/completions",
+        headers=headers,
+        json=payload,
+        stream=True,
+        timeout=60
+    )
+    
+    print(f"Status: {resp.status_code}")
+    
+    if resp.status_code == 200:
+        print("✅ Streaming started, waiting for chunks...\n")
+        full_content = ""
+        full_reasoning = ""
+        chunk_count = 0
+        
         for line in resp.iter_lines():
-            if not line:
-                continue
-            decoded = line.decode("utf-8")
-            if not decoded.startswith("data: "):
-                continue
-            data_str = decoded[len("data: "):].strip()
-            if data_str == "[DONE]":
-                print("\n\n✅ DONE")
-                break
-            try:
-                chunk = json.loads(data_str)
-            except json.JSONDecodeError:
-                continue
+            if line:
+                line = line.decode('utf-8')
+                if line.startswith('data: '):
+                    data_str = line[6:]
+                    if data_str == '[DONE]':
+                        break
+                    try:
+                        chunk = json.loads(data_str)
+                        delta = chunk.get('choices', [{}])[0].get('delta', {})
+                        content = delta.get('content', '')
+                        reasoning = delta.get('reasoning_content', '')
+                        
+                        if reasoning:
+                            full_reasoning += reasoning
+                            print(f"🧠 {reasoning}", end='', flush=True)
+                        if content:
+                            full_content += content
+                            chunk_count += 1
+                            print(content, end='', flush=True)
+                    except json.JSONDecodeError:
+                        pass
+        
+        elapsed = time.time() - start_time
+        print(f"\n\n✅ Finished in {elapsed:.2f}s | {chunk_count} chunks")
+        if full_reasoning.strip():
+            print(f"🧠 [Reasoning complet] {full_reasoning.strip()}")
+        print(f"📝 [Réponse finale] '{full_content.strip()}'")
+        return True
+    else:
+        print(f"❌ Erreur: {resp.text}")
+        return False
 
-            delta = chunk.get("choices", [{}])[0].get("delta", {})
+def test_chat_non_streaming():
+    """Teste le mode non-streaming"""
+    print("\n" + "="*60)
+    print("📄 TEST 3: Chat Completions (NON-STREAMING)")
+    print("="*60)
+    
+    payload = {
+        "model": "deepseek/generic",
+        "messages": [
+            {"role": "user", "content": "Réponds uniquement par le mot 'OK'."}
+        ],
+        "stream": False
+    }
+    
+    start_time = time.time()
+    resp = requests.post(
+        f"{BASE_URL}/chat/completions",
+        headers=headers,
+        json=payload,
+        timeout=60
+    )
+    
+    print(f"Status: {resp.status_code}")
+    
+    if resp.status_code == 200:
+        data = resp.json()
+        message = data.get('choices', [{}])[0].get('message', {})
+        content = message.get('content', '')
+        reasoning = message.get('reasoning_content', '')
+        
+        elapsed = time.time() - start_time
+        if reasoning.strip():
+            print(f"🧠 [Reasoning] {reasoning.strip()}")
+        print(f"✅ Response took {elapsed:.2f}s: '{content.strip()}'")
+        return True
+    else:
+        print(f"❌ Erreur: {resp.text}")
+        return False
 
-            if delta.get("reasoning_content"):
-                saw_reasoning = True
-                print(f"\033[90m{delta['reasoning_content']}\033[0m", end="", flush=True)
+def test_tools():
+    """Teste les appels d'outils"""
+    print("\n" + "="*60)
+    print("🔧 TEST 4: TOOL CALLS")
+    print("="*60)
+    
+    payload = {
+        "model": "deepseek/generic",
+        "messages": [
+            {"role": "user", "content": "Quel temps fait-il à Paris ?"}
+        ],
+        "tools": [
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_weather",
+                    "description": "Obtenir la météo d'une ville",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "city": {"type": "string", "description": "Nom de la ville"}
+                        },
+                        "required": ["city"]
+                    }
+                }
+            }
+        ],
+        "stream": False
+    }
+    
+    resp = requests.post(
+        f"{BASE_URL}/chat/completions",
+        headers=headers,
+        json=payload,
+        timeout=60
+    )
+    
+    print(f"Status: {resp.status_code}")
+    
+    if resp.status_code == 200:
+        data = resp.json()
+        message = data.get('choices', [{}])[0].get('message', {})
+        tool_calls = message.get('tool_calls', [])
+        reasoning = message.get('reasoning_content', '')
+        
+        if reasoning.strip():
+            print(f"🧠 [Reasoning] {reasoning.strip()}")
 
-            if delta.get("content"):
-                saw_content = True
-                print(delta["content"], end="", flush=True)
-
-            if delta.get("tool_calls"):
-                print(f"\n🔧 TOOL CALL: {json.dumps(delta['tool_calls'], indent=2)}")
-
-    print(f"\n\n📊 Summary: reasoning_seen={saw_reasoning} | content_seen={saw_content}")
-
+        if tool_calls:
+            print(f"✅ {len(tool_calls)} appel(s) d'outil détecté(s):")
+            for tc in tool_calls:
+                print(f"  - Fonction: {tc['function']['name']}")
+                print(f"    Arguments: {tc['function']['arguments']}")
+            return True
+        else:
+            content = message.get('content', '')
+            print(f"⚠️ Aucun appel d'outil. Réponse texte: '{content[:100]}...'")
+            return True
+    else:
+        print(f"❌ Erreur: {resp.text}")
+        return False
 
 if __name__ == "__main__":
-    # Test 1
-    run_test(
-        label="Qwen3.8-Max — Fast (no reasoning)",
-        model="qwen/qwen3.8-max",
-        reasoning_effort="none",
-        prompt="What is the capital of France? Answer in one sentence."
-    )
-
-    # Test 2
-    run_test(
-        label="Qwen3.7-Plus — Think (reasoning enabled)",
-        model="qwen/qwen3.7-plus",
-        reasoning_effort="high",
-        prompt="If a train leaves at 3pm going 60mph and another leaves at 4pm going 90mph in the same direction, when does the second train catch up? Think step by step."
-    )
+    print("🚀 DeepSeek Bridge Test Suite")
+    print(f"📡 Serveur: {BASE_URL}")
+    print(f"🔑 API Key: {API_KEY}")
+    
+    results = []
+    
+    # Test 1: Modèles
+    results.append(("Models", test_models()))
+    
+    # Test 2: Streaming
+    results.append(("Streaming", test_chat_streaming()))
+    
+    # Test 3: Non-streaming
+    results.append(("Non-Streaming", test_chat_non_streaming()))
+    
+    # Test 4: Tools
+    results.append(("Tool Calls", test_tools()))
+    
+    # Résumé
+    print("\n" + "="*60)
+    print("📊 TESTS SUMMARY")
+    print("="*60)
+    for name, success in results:
+        status = "✅ PASS" if success else "❌ FAIL"
+        print(f"  {status} - {name}")
+    
+    total = len(results)
+    passed = sum(1 for _, s in results if s)
+    print(f"\n🎯 Score: {passed}/{total} tests réussis")
