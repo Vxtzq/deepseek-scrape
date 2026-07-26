@@ -45,7 +45,7 @@ Deepseek Studio Web Interface (Authenticated Session)
 1. Clone the repository:
    ```bash
    git clone https://github.com/Vxtzq/Deepseek-scrape.git
-   cd Deepseek-openai-bridge
+   cd Deepseek-scrape
    ```
 
 2. Install Python dependencies:
